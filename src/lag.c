@@ -11,10 +11,12 @@
 
 // don't need a chance
 static Ihandle *inboundCheckbox, *outboundCheckbox, *timeInput;
+static Ihandle* inboundCheckbox, * outboundCheckbox, * chanceInput;
 
 static volatile short lagEnabled = 0,
     lagInbound = 1,
     lagOutbound = 1,
+    chance = 1000, // [0-10000]
     lagTime = LAG_DEFAULT; // default for 50ms
 
 static PacketNode lagHeadNode = {0}, lagTailNode = {0};
@@ -33,9 +35,15 @@ static Ihandle *lagSetupUI() {
         outboundCheckbox = IupToggle("Outbound", NULL),
         IupLabel("Delay(ms):"),
         timeInput = IupText(NULL),
+        IupLabel("Chance(%):"),
+        chanceInput = IupText(NULL),
         NULL
         );
 
+    IupSetAttribute(chanceInput, "VISIBLECOLUMNS", "4");
+    IupSetAttribute(chanceInput, "VALUE", "10.0");
+    IupSetCallback(chanceInput, "VALUECHANGED_CB", uiSyncChance);
+    IupSetAttribute(chanceInput, SYNCED_VALUE, (char*)&chance);
     IupSetAttribute(timeInput, "VISIBLECOLUMNS", "4");
     IupSetAttribute(timeInput, "VALUE", STR(LAG_DEFAULT));
     IupSetCallback(timeInput, "VALUECHANGED_CB", uiSyncInteger);
@@ -55,6 +63,7 @@ static Ihandle *lagSetupUI() {
         setFromParameter(inboundCheckbox, "VALUE", NAME"-inbound");
         setFromParameter(outboundCheckbox, "VALUE", NAME"-outbound");
         setFromParameter(timeInput, "VALUE", NAME"-time");
+        setFromParameter(chanceInput, "VALUE", NAME"-chance");
     }
 
     return lagControlsBox;
@@ -88,7 +97,8 @@ static short lagProcess(PacketNode *head, PacketNode *tail) {
     PacketNode *pac = tail->prev;
     // pick up all packets and fill in the current time
     while (bufSize < KEEP_AT_MOST && pac != head) {
-        if (checkDirection(pac->addr.Outbound, lagInbound, lagOutbound)) {
+        if (checkDirection(pac->addr.Outbound, lagInbound, lagOutbound)
+            && calcChance(chance)) {
             insertAfter(popNode(pac), bufHead)->timestamp = timeGetTime();
             ++bufSize;
             pac = tail->prev;
